@@ -15,10 +15,15 @@ struct ProspectsView: View {
         case none, contacted, uncontacted
     }
     
+    enum SortType {
+        case name, mostRecent
+    }
+    
     @Environment(\.modelContext) var modelContext
     @Query(sort: \Prospect.name) var prospects: [Prospect]
     @State private var isShowingScanner = false
     @State private var selectedProspects = Set<Prospect>()
+    @State private var sortOrder: SortType = .name
     
     let filter: FilterType
     
@@ -33,39 +38,59 @@ struct ProspectsView: View {
         }
     }
     
+    var sortedProspects: [Prospect] {
+        switch sortOrder {
+        case .name:
+            prospects.sorted{ $0.name < $1.name }
+        case .mostRecent:
+            prospects.sorted { $0.dateAdded > $1.dateAdded }
+        }
+    }
+    
     var body: some View {
         NavigationStack {
-            List(prospects, selection: $selectedProspects) { prospect in
-                VStack(alignment: .leading) {
-                    Text(prospect.name)
-                        .font(.headline)
-                    
-                    Text(prospect.emailAddress)
-                        .foregroundStyle(.secondary)
-                }
-                .swipeActions {
-                    Button("Delete", systemImage: "trash", role: .destructive) {
-                        modelContext.delete(prospect)
-                    }
-                    
-                    if prospect.isContacted {
-                        Button("Mark Uncontacted", systemImage: "person.crop.circle.badge.xmark") {
-                            prospect.isContacted.toggle()
+            List(sortedProspects, selection: $selectedProspects) { prospect in
+                NavigationLink {
+                    EditProspectView(prospect: prospect)
+                } label: {
+                    VStack(alignment: .leading) {
+                        // Challenge 1: Add an icon to the “Everyone” screen showing whether a prospect was contacted or not.
+                        Label {
+                            Text(prospect.name)
+                                .font(.headline)
+                        } icon: {
+                            Image(systemName: prospect.isContacted ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(prospect.isContacted ? .green : .gray)
                         }
-                        .tint(.blue)
-                    } else {
-                        Button("Mark Contacted", systemImage: "person.crop.circle.fill.badge.checkmark") {
-                            prospect.isContacted.toggle()
-                        }
-                        .tint(.green)
                         
-                        Button("Remind me", systemImage: "bell") {
-                            addNotification(for: prospect)
-                        }
-                        .tint(.orange)
+                        Text(prospect.emailAddress)
+                            .foregroundStyle(.secondary)
                     }
+                    .swipeActions {
+                        Button("Delete", systemImage: "trash", role: .destructive) {
+                            modelContext.delete(prospect)
+                        }
+                        
+                        if prospect.isContacted {
+                            Button("Mark Uncontacted", systemImage: "person.crop.circle.badge.xmark") {
+                                prospect.isContacted.toggle()
+                            }
+                            .tint(.blue)
+                        } else {
+                            Button("Mark Contacted", systemImage: "person.crop.circle.fill.badge.checkmark") {
+                                prospect.isContacted.toggle()
+                            }
+                            .tint(.green)
+                            
+                            Button("Remind me", systemImage: "bell") {
+                                addNotification(for: prospect)
+                            }
+                            .tint(.orange)
+                        }
+                    }
+                    .tag(prospect)
                 }
-                .tag(prospect)
+                
             }
                 .navigationTitle(title)
                 .toolbar {
@@ -77,6 +102,13 @@ struct ProspectsView: View {
                                         
                     ToolbarItem(placement: .topBarLeading) {
                         EditButton()
+                    }
+                    
+                    ToolbarItem(placement: .topBarLeading) {
+                        Menu("Sort") {
+                            Button("By Name") {sortOrder = .name}
+                            Button("By Most Recent") {sortOrder = .mostRecent}
+                        }
                     }
                     
                     if selectedProspects.isEmpty == false {
